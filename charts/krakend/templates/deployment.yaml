@@ -1,0 +1,151 @@
+{{- if eq .Values.deploymentType "deployment" }}
+apiVersion: apps/v1
+kind: Deployment
+{{- else if eq .Values.deploymentType "rollout" }}
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+{{- end }}
+metadata:
+  name: {{ include "krakend.fullname" . }}
+  labels:
+    {{- include "krakend.labels" . | nindent 4 }}
+  {{- with .Values.deploymentAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if eq .Values.autoscaling.enabled .Values.keda.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "krakend.selectorLabels" . | nindent 6 }}
+  {{- with .Values.strategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  template:
+    metadata:
+      annotations:
+        {{- if not .Values.krakend.allInOneImage }}
+        checksum/cm-config: {{ include (print $.Template.BasePath "/cm-config.yaml") . | sha256sum }}
+        checksum/cm-partials: {{ include (print $.Template.BasePath "/cm-partials.yaml") . | sha256sum }}
+        checksum/cm-settings: {{ include (print $.Template.BasePath "/cm-settings.yaml") . | sha256sum }}
+        checksum/cm-templates: {{ include (print $.Template.BasePath "/cm-templates.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "krakend.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "krakend.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: [ "/usr/bin/krakend" ]
+          args:
+            - "run"
+            - "-c"
+            - "{{ include "krakend.configFilePath" . }}"
+            - "-p"
+            - {{ quote .Values.service.targetPort }}
+          env:
+            - name: KRAKEND_PORT
+              value: {{ quote .Values.service.targetPort }}
+            - name: FC_ENABLE
+              value: '1'
+            {{- if not .Values.krakend.allInOneImage }}
+            - name: FC_SETTINGS
+              value: {{ include "krakend.settingsDir" . | quote }}
+            - name: FC_PARTIALS
+              value: {{ include "krakend.partialsDir" . | quote }}
+            - name: FC_TEMPLATES
+              value: {{ include "krakend.templatesDir" . | quote }}
+            {{- end }}
+            {{- with .Values.krakend.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
+          {{- if .Values.serviceMonitor.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.serviceMonitor.targetPort }}
+              protocol: TCP
+          {{- end }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe: {{ toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe: {{ toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if not .Values.krakend.allInOneImage }}
+            - name: config
+              mountPath: {{ include "krakend.configFileDir" . }}
+            - name: partials
+              mountPath: {{ include "krakend.partialsDir" . }}
+            - name: settings
+              mountPath: {{ include "krakend.settingsDir" . }}
+            - name: templates
+              mountPath: {{ include "krakend.templatesDir" . }}
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          lifecycle:
+            {{- toYaml .Values.lifecycle | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if not .Values.krakend.allInOneImage }}
+        - name: config
+          configMap:
+            name: {{ include "krakend.fullname" . }}-config
+        - name: partials
+          configMap:
+            name: {{ include "krakend.fullname" . }}-partials
+        - name: settings
+          configMap:
+            name: {{ include "krakend.fullname" . }}-settings
+        - name: templates
+          configMap:
+            name: {{ include "krakend.fullname" . }}-templates
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}

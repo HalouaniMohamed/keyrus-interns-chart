@@ -1,0 +1,113 @@
+# Krakend
+
+![Version: {{ .Version }}](https://img.shields.io/badge/Version-{{ .Version | replace "-" "--" }}-informational?style=for-the-badge)
+{{ if .Type }}![Type: {{ .Type }}](https://img.shields.io/badge/Type-{{ .Type }}-informational?style=for-the-badge) {{ end }}
+{{ if .AppVersion }}![AppVersion: {{ .AppVersion }}](https://img.shields.io/badge/AppVersion-{{ .AppVersion | replace "-" "--" }}-informational?style=for-the-badge) {{ end }}
+
+This is a helm chart that deploys a [Krakend](https://www.krakend.io/) instance.
+
+## Description
+
+{{ template "chart.description" . }}
+
+## Installation
+
+* Add the Equinix Metal helm repository
+```bash
+helm repo add equinixmetal https://helm.equinixmetal.com
+```
+
+* Install the helm chart using default values
+```bash
+helm install krakend equinixmetal/krakend
+```
+
+> If you are using your own chart, reference the following to your chart's dependencies:
+> ```yaml
+> dependencies:
+>   - name: krakend
+>     version: v0.1.16
+>     repository: "https://helm.equinixmetal.com"
+> ```
+
+## Usage
+
+There are two main modes of operation:
+
+* configMap-based: the configuration is stored in a configMaps and mounted in the
+  container.
+
+* all-in-one image: the configuration is stored in the container image itself.
+
+Note that the all-in-one image method assumes that the configuration is stored
+in the `/etc/krakend-src/config` path. This is done to allow for mounting
+the license as describe in the section below.
+
+Both modes of operation enable the flexible configuration feature. For the all-in-one
+image, this is done so that the configuration can take environment variables into use.
+
+Note that for a further description on how to use partials, settings and templates,
+please refer to [the official krakend documentation](https://www.krakend.io/docs/configuration/flexible-config/).
+
+{{ template "chart.valuesSection" . }}
+
+## Development
+
+### Prerequisites
+
+- [helm](https://helm.sh/docs/intro/install/)
+- [helm-docs](https://github.com/norwoodj/helm-docs)
+
+### Testing
+
+Ensure that the documentation is up to date before pushing a pull request:
+
+```bash
+helm-docs
+```
+
+### Releasing
+
+There is a useful Makefile target that's useful to cut a release. So, simply do:
+
+```bash
+TAG=$RELEASE_VERSION make release
+```
+
+And the release will happen.
+
+Note that this project follows the [Semantic Versioning scheme](https://semver.org/), so
+make sure to follow it when cutting releases.
+
+The `TAG` Makefile variable takes a release version without the `v` prefix. For example,
+if you want to cut a release with version `v1.2.3`, you'd do:
+
+```bash
+TAG=1.2.3 make release
+```
+
+# Using Krakend.io Enterprise
+
+Krakend.io Enterprise is a commercial product that extends the capabilities
+of the open source Krakend.io API Gateway. It is available as a Docker image
+that can be used as a drop-in replacement for the open source image.
+
+In order to configure the helm chart to use it, you'd need a values file similar
+as the following:
+
+```yaml
+image:
+  registry: docker.io
+  repository: krakend/krakend-ee
+  tag: "2.1.2"
+extraVolumeMounts:
+  - name: license
+    mountPath: /etc/krakend/LICENSE
+    readOnly: true
+extraVolumes:
+  - name: license
+    secret:
+      secretName: krakend-license
+```
+
+Note the mount of the license file in the `/etc/krakend/LICENSE` path.

@@ -1,0 +1,340 @@
+# -- (int) Number of replicas to deploy
+replicaCount: 1
+
+image:
+  # -- The image registry to use
+  registry: docker.io
+  # -- The image repository to use
+  repository: devopsfaith/krakend
+  # -- The image tag to use
+  tag: "2.6.3"
+  # -- The image pull policy to use
+  pullPolicy: IfNotPresent
+
+# -- (string) The deployment type to use for the krakend service
+# Valid values are `deployment` and `rollout`
+deploymentType: deployment
+
+# -- (object) The strategy for the krakend deployment. This can either be
+# a `deployment` or a `rollout` strategy.
+# For more information on the Argo Rollout strategy, see https://argo-rollouts.readthedocs.io/en/stable/features/specification/
+strategy: {}
+#  type: RollingUpdate
+#  rollingUpdate:
+#    maxSurge: 25%
+#    maxUnavailable: 10%
+
+krakend:
+  # -- (bool) Whether the given krakend image to be used contains everything needed
+  # for the krakend service to run. If set to false, the image will
+  # be used as a base image and the configuration will be loaded from
+  # the configmap. Note that the all-in-one image assumes the krakend
+  # configuration is located at /etc/krakend-src/config/krakend.tmpl
+  allInOneImage: false
+  # -- (array) The environment variables to use for the krakend container.
+  # The default is just the ones needed to enable flexible configuration.
+  env: []
+  # -- (string, optional) If set, this key will contain the full configuration of the krakend service
+  config: ""
+  # -- (string, optional) an external file relative path, will contain the full
+  # configuration of the krakend service. useful if config file is generated
+  # with flexible config https://www.krakend.io/docs/configuration/flexible-config/
+  configFileSource: ""
+  # -- (string, optional) an external file relative path, will contain the partial configuration files of the krakend service.
+  partialsDirSource: ""
+  # -- (string, optional) an external file relative path, will contain the setting configuration files of the krakend service.
+  settingsDirSource: ""
+  # -- (string, optional) an external file relative path, will contain the template configuration files of the krakend service.
+  templatesDirSource: ""
+  # -- (Object) The default configuration has a partials files that
+  # will be used to load several aspects of the configuration.
+  # If you want to include expra partials, add or remove them here.
+  partials:
+    input_headers.tmpl: |-
+      "input_headers": [
+        "Content-Type",
+        "ClientId"
+      ]
+    rate_limit_backend.tmpl: |-
+      "qos/ratelimit/proxy": {
+        "max_rate": 0.5,
+        "capacity": 1
+      }
+    endpoints.tmpl: |-
+      [
+        {
+          "endpoint": "/test",
+          "method": "GET",
+          "backend": [
+              {
+                  "method": "GET",
+                  "host": [],
+                  "url_pattern": "/__debug/roots",
+                  "encoding": "json",
+                  "deny": [
+                      "message"
+                  ]
+              }
+          ],
+          "extra_config": {
+              "proxy": {
+                  "static": {
+                      "data": {
+                          "collection": [
+                              {
+                                  "directories": [
+                                      "Graceland"
+                                  ]
+                              }
+                          ],
+                          "version": "deficient"
+                      },
+                      "strategy": "always"
+                  }
+              }
+          },
+          "output_encoding": "json"
+        }
+      ]
+  # -- The default configuration has a settings files that
+  # will be used to load several aspects of the configuration.
+  settings:
+    service.json: |-
+      {
+      	"environment": "PRODUCTION",
+      	"default_host": "http://localhost:8080",
+      	"timeout": "3s",
+      	"cache_ttl": "3s",
+      	"output_encoding": "json"
+      }
+  # -- While default configuration does not take into use
+  # templates; you may want to add your own templates here.
+  # Note that you'd need to set a custom configuration file
+  # to use them.
+  templates: {}
+  # -- (object) The service-level "extra_config" settings.
+  # This will directly be translated to JSON and is added only
+  # if you're not fully overriding the configuration via
+  # the `config` setting.
+  # For more information, see https://www.krakend.io/docs/enterprise/configuration/
+  extraConfig:
+    router:
+      "@comment": "The health endpoint checks do not show in the logs"
+      logger_skip_paths:
+        - "/__health"
+
+# -- (list) List of secrets containing the credentials to use for the image
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # -- (bool) Specifies whether a service account should be created
+  create: true
+  # -- (object) The annotations to use for the service account
+  annotations: {}
+  # -- (string) The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+# -- (object) The annotations to use for the krakend pod
+podAnnotations: {}
+
+# -- (object) The annotations to use for the krakend deployment
+deploymentAnnotations: {}
+
+# -- (object) Labels to use for the krakend pod
+podLabels: {}
+
+# -- (object) The securityContext to use for the krakend pod
+podSecurityContext: {}
+  # fsGroup: 2000
+
+# -- (object) The securityContext to use for the krakend container
+securityContext:
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  runAsUser: 1000
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+    add:
+      - NET_BIND_SERVICE
+
+# -- (object) The service settings to use for the krakend service
+service:
+  # -- (string) The External Traffic Policy of the service
+  externalTrafficPolicy: ""
+  # -- (string) The type of service to use
+  type: ClusterIP
+  # -- (int) The port to use for the service
+  port: 80
+  # -- (int) The target port to use for the service
+  targetPort: 8080
+  # -- (object) The annotations to use for the service
+  annotations: {}
+  # -- (object) The service settings to reach the metrics port
+  metrics:
+    # -- (bool) Specifies whether the metrics port is reachable
+    enabled: false
+    # -- (int) The port to use for the metrics service
+    port: 9100
+    # -- (int) The target port to use for the metrics service
+    targetPort: 9100
+
+# -- (object) The ingress settings to use for the krakend ingress
+ingress:
+  # -- (bool) Specifies whether an ingress should be created
+  enabled: false
+  # -- (string) The class to use for the ingress
+  className: ""
+  # -- (object) The annotations to use for the ingress
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  # -- (list) The list of hosts to use for the ingress
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+
+# -- (object) Krakend container lifecycle hooks (PostStart, PreStop)
+lifecycle: {}
+
+# -- (object) The resources to use for the krakend pod
+resources: {}
+
+# -- (object) The nodeSelector to use for the krakend pod
+nodeSelector: {}
+
+# -- (object) The tolerations to use for the krakend pod
+tolerations: []
+
+# -- (object) The affinity to use for the krakend pod
+affinity: {}
+
+# -- (array) The topologySpreadConstraints to use for the krakend pod
+topologySpreadConstraints: []
+
+# -- (array) extraVolumeMounts allows you to mount extra volumes to the krakend pod
+extraVolumeMounts: []
+
+# -- (array) extraVolumes allows you to mount extra volumes to the krakend pod
+extraVolumes: []
+
+# -- (object) The livenessProbe to use for the krakend pod
+livenessProbe:
+  httpGet:
+    path: /__health
+    port: http
+
+# -- (object) The readinessProbe to use for the krakend pod
+readinessProbe:
+  httpGet:
+    path: /__health
+    port: http
+
+# -- (object) podDisruptionBudget allows you to define minumum and maximum available pods
+podDisruptionBudget:
+  # -- (bool) Set to true to create a default ServiceMonitor for your application
+  enabled: false
+  # -- minimum available pods
+  minAvailable: 1
+  # -- maximum available pods
+  maxUnavailable: ""
+  # -- UnhealthyPodEvictionPolicy defines the criteria for when unhealthy pods should be considered for eviction
+  unhealthyPodEvictionPolicy: ""
+
+# -- (object) The serviceMonitor configures a ServiceMonitor for your application
+serviceMonitor:
+  # -- (bool) Set to true to create a default ServiceMonitor for your application
+  enabled: false
+  # -- Annotations to add to ServiceMonitor
+  annotations: {}
+  # -- Interval for scrape metrics.
+  interval: 10s
+  # -- time out interval when scraping metrics
+  scrapeTimeout: 10s
+  # -- prometheus metrics port exposed by krakend
+  targetPort: 9091
+
+# -- (object) The networkPolicies configures ingress NetworkPolicies for your application
+networkPolicies:
+  # -- (bool) Set to true to create NetworkPolicies for your application
+  enabled: false
+  # -- (list) List of NetworkPolicy objects
+  policies:
+    # -- Name of the NetworkPolicy
+    - name: "allow-namespace1"
+      # -- Name of the namespace allowed to reach (or be reached by) your application
+      namespace: "namespace1"
+      # -- Type of the network policy (ingress or egress)
+      type: "ingress"
+    # - name: "allow-namespace2"
+      # -- Name of the namespace allowed to reach (or be reached by) your application
+      # namespace: "namespace2"
+      # -- Type of the network policy (ingress or egress)
+      # type: "egress"
+
+# -- (object) Configures HorizontalPodAutoscaler for your Deployment
+autoscaling:
+  enabled: false
+  annotations: {}
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 50
+  targetMemoryUtilizationPercentage: 50
+  behavior: {}
+  # scaleDown:
+  #   stabilizationWindowSeconds: 300
+  #   policies:
+  #   - type: Pods
+  #     value: 1
+  #     periodSeconds: 180
+  # scaleUp:
+  #   stabilizationWindowSeconds: 300
+  #   policies:
+  #   - type: Pods
+  #     value: 2
+  #     periodSeconds: 60
+
+# -- (object) Configures a keda ScaledObject for your Deployment.
+# It's mutually exclusive with hpa autoscaling
+keda:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  pollingInterval: 30
+  cooldownPeriod: 300
+  # fallback:
+  #   failureThreshold: 3
+  #   replicas: 11
+  restoreToOriginalReplicaCount: false
+  scaledObject:
+    annotations: {}
+  triggers: []
+  # - type: prometheus
+  #   metadata:
+  #     serverAddress: http://<prometheus-host>:9090
+  #     metricName: http_requests_total
+  #     threshold: '100'
+  #     query: sum(rate(http_requests_total{deployment="my-deployment"}[2m]))
+  behavior: {}
+  # scaleDown:
+  #   stabilizationWindowSeconds: 300
+  #   policies:
+  #   - type: Pods
+  #     value: 1
+  #     periodSeconds: 180
+  # scaleUp:
+  #   stabilizationWindowSeconds: 300
+  #   policies:
+  #   - type: Pods
+  #     value: 2
+  #     periodSeconds: 60
